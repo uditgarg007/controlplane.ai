@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ControlPlane.ai — HITL Review Queue</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="dashboard.css" />
+  <style>
+    .hitl-queue { display: flex; flex-direction: column; gap: 16px; margin-top: 20px; }
+    .hitl-card {
+      background: var(--clr-surface);
+      border: 1px solid var(--clr-border);
+      border-radius: var(--radius-md);
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .hitl-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--clr-border);
+      padding-bottom: 10px;
+    }
+    .hitl-field { margin-bottom: 10px; }
+    .hitl-label { font-size: 0.7rem; color: var(--clr-text-dim); text-transform: uppercase; margin-bottom: 4px; }
+    .hitl-content { 
+      background: rgba(255,255,255,0.03); 
+      padding: 12px; 
+      border-radius: var(--radius-sm);
+      font-size: 0.85rem;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-family: var(--font-body);
+    }
+    .hitl-actions {
+      display: flex;
+      gap: 12px;
+      margin-top: 10px;
+    }
+    .btn {
+      padding: 8px 16px;
+      border: none;
+      border-radius: var(--radius-sm);
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 0.8rem;
+    }
+    .btn-approve { background: rgba(52, 211, 153, 0.2); color: var(--clr-pass); border: 1px solid var(--clr-pass); }
+    .btn-approve:hover { background: rgba(52, 211, 153, 0.3); }
+    .btn-block { background: rgba(248, 113, 113, 0.2); color: var(--clr-fail); border: 1px solid var(--clr-fail); }
+    .btn-block:hover { background: rgba(248, 113, 113, 0.3); }
+    .btn-redact { background: rgba(107, 114, 128, 0.2); color: var(--clr-redact); border: 1px solid var(--clr-redact); }
+    .btn-redact:hover { background: rgba(107, 114, 128, 0.3); }
+    .empty-queue { padding: 40px; text-align: center; color: var(--clr-text-dim); font-size: 1.1rem; }
+  </style>
+</head>
+<body>
+  <header class="header">
+    <div class="header-inner">
+      <div class="logo-group">
+        <span class="logo-text">ControlPlane<span class="logo-dot">.ai</span> / HITL Review</span>
+      </div>
+      <div class="header-right">
+        <a href="/dashboard/" style="color: var(--clr-primary); text-decoration: none;">← Back to Dashboard</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="main">
+    <section>
+      <h2 style="color: var(--clr-text);">Pending Review Queue</h2>
+      <p style="color: var(--clr-text-sub); font-size: 0.9rem; margin-bottom: 20px;">
+        Requests flagged as QUARANTINE await manual administrator review.
+      </p>
+      
+      <div id="queueContainer" class="hitl-queue">
+        <div class="empty-queue">Loading queue...</div>
+      </div>
+    </section>
+  </main>
+
+  <script src="hitl.js"></script>
+</body>
+</html>

@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ControlPlane.ai — Live Metrics Dashboard</title>
+  <meta name="description" content="Real-time observability dashboard for the ControlPlane.ai LLM middleware: latency, token economics, cache performance, and hallucination detection." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="dashboard.css" />
+</head>
+<body>
+  <!-- ═══════════════════════════════════════════════════════
+       HEADER
+  ════════════════════════════════════════════════════════ -->
+  <header class="header">
+    <div class="header-inner">
+      <div class="logo-group">
+        <div class="logo-icon" aria-hidden="true">
+          <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+            <circle cx="14" cy="14" r="13" stroke="url(#lg1)" stroke-width="2"/>
+            <path d="M8 14 L14 8 L20 14 L14 20 Z" fill="url(#lg2)"/>
+            <defs>
+              <linearGradient id="lg1" x1="0" y1="0" x2="28" y2="28">
+                <stop stop-color="#6366f1"/>
+                <stop offset="1" stop-color="#a78bfa"/>
+              </linearGradient>
+              <linearGradient id="lg2" x1="0" y1="0" x2="28" y2="28">
+                <stop stop-color="#818cf8"/>
+                <stop offset="1" stop-color="#c4b5fd"/>
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
+        <span class="logo-text">ControlPlane<span class="logo-dot">.ai</span></span>
+      </div>
+      <div class="header-right">
+        <div class="live-badge" id="liveIndicator">
+          <span class="live-dot"></span>
+          <span>LIVE</span>
+        </div>
+        <a href="/dashboard/hitl.html" style="color: var(--clr-text-sub); font-size: 0.8rem; text-decoration: none; margin-right: 12px; font-weight: 500;">📋 Review Queue</a>
+        <span class="update-label">Auto-refresh: <strong id="refreshCountdown">5s</strong></span>
+        <button class="btn-icon" id="pauseBtn" title="Pause refresh" aria-label="Pause auto-refresh">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <rect x="3" y="2" width="4" height="12" rx="1"/>
+            <rect x="9" y="2" width="4" height="12" rx="1"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ═══════════════════════════════════════════════════════
+       MAIN CONTENT
+  ════════════════════════════════════════════════════════ -->
+  <main class="main">
+
+    <!-- ── KPI Row ─────────────────────────────────────── -->
+    <section class="kpi-row" aria-label="Key Performance Indicators">
+      <div class="kpi-card" id="kpiTotal">
+        <div class="kpi-label">Total Requests</div>
+        <div class="kpi-value" id="valTotal">—</div>
+        <div class="kpi-sub">all time</div>
+      </div>
+      <div class="kpi-card kpi-latency" id="kpiLatency">
+        <div class="kpi-label">Avg Latency</div>
+        <div class="kpi-value" id="valLatency">—</div>
+        <div class="kpi-sub">milliseconds</div>
+      </div>
+      <div class="kpi-card kpi-cache" id="kpiCache">
+        <div class="kpi-label">Cache Hit Rate</div>
+        <div class="kpi-value" id="valCacheRate">—</div>
+        <div class="kpi-sub">semantic cache</div>
+      </div>
+      <div class="kpi-card kpi-align" id="kpiAlign">
+        <div class="kpi-label">Avg Align Score</div>
+        <div class="kpi-value" id="valAlign">—</div>
+        <div class="kpi-sub">grounding quality</div>
+      </div>
+      <div class="kpi-card kpi-savings" id="kpiSavings">
+        <div class="kpi-label">Token Savings</div>
+        <div class="kpi-value" id="valSavings">—</div>
+        <div class="kpi-sub">avg compression</div>
+      </div>
+    </section>
+
+    <!-- ── Charts Row ──────────────────────────────────── -->
+    <section class="charts-row" aria-label="Pipeline Analytics">
+
+      <!-- Severity Distribution -->
+      <div class="chart-card" id="severityCard">
+        <div class="chart-header">
+          <h2 class="chart-title">Severity Distribution</h2>
+          <span class="chart-badge">Real-time</span>
+        </div>
+        <div class="donut-container">
+          <canvas id="severityChart" width="180" height="180" aria-label="Severity distribution donut chart"></canvas>
+          <div class="donut-center">
+            <div class="donut-center-value" id="donutPassPct">—</div>
+            <div class="donut-center-label">PASS rate</div>
+          </div>
+        </div>
+        <div class="legend" id="severityLegend">
+          <div class="legend-item"><span class="legend-dot pass"></span> PASS <strong id="legPass">0</strong><span id="legPassPct" class="legend-pct"></span></div>
+          <div class="legend-item"><span class="legend-dot warn"></span> WARN <strong id="legWarn">0</strong><span id="legWarnPct" class="legend-pct"></span></div>
+          <div class="legend-item"><span class="legend-dot quarantine"></span> QUARANTINE <strong id="legQuarantine">0</strong><span id="legQuarantinePct" class="legend-pct"></span></div>
+          <div class="legend-item"><span class="legend-dot redact"></span> REDACT <strong id="legRedact">0</strong><span id="legRedactPct" class="legend-pct"></span></div>
+          <div class="legend-item"><span class="legend-dot fail"></span> FAIL <strong id="legFail">0</strong><span id="legFailPct" class="legend-pct"></span></div>
+        </div>
+      </div>
+
+      <!-- Latency Sparkline -->
+      <div class="chart-card wide" id="latencyCard">
+        <div class="chart-header">
+          <h2 class="chart-title">Latency Trend</h2>
+          <span class="chart-badge">Last 10 requests</span>
+        </div>
+        <div class="sparkline-container">
+          <canvas id="latencyChart" aria-label="Latency sparkline chart"></canvas>
+        </div>
+        <div class="sparkline-labels">
+          <span>older</span>
+          <span>recent</span>
+        </div>
+      </div>
+
+      <!-- Token Economics -->
+      <div class="chart-card" id="tokenCard">
+        <div class="chart-header">
+          <h2 class="chart-title">Token Economics</h2>
+          <span class="chart-badge">Per request avg</span>
+        </div>
+        <div class="token-bars">
+          <div class="token-bar-group">
+            <div class="token-bar-label">Raw Tokens</div>
+            <div class="token-bar-track">
+              <div class="token-bar raw" id="barRaw" style="width: 100%"></div>
+            </div>
+            <div class="token-bar-val" id="valRawTokens">—</div>
+          </div>
+          <div class="token-bar-group">
+            <div class="token-bar-label">Compressed</div>
+            <div class="token-bar-track">
+              <div class="token-bar compressed" id="barCompressed" style="width: 50%"></div>
+            </div>
+            <div class="token-bar-val" id="valCompressedTokens">—</div>
+          </div>
+        </div>
+        <div class="token-savings-badge" id="tokenSavingsBadge">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><path d="M7 1L9 5H13L9.5 8L11 12L7 9.5L3 12L4.5 8L1 5H5L7 1Z"/></svg>
+          <span id="tokenSavingsText">—% saved</span>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ── Bottom Row ──────────────────────────────────── -->
+    <section class="bottom-row" aria-label="Repair Loop and Recent Activity">
+
+      <!-- Repair Loop Stats -->
+      <div class="chart-card" id="repairCard">
+        <div class="chart-header">
+          <h2 class="chart-title">Repair Loop</h2>
+          <span class="chart-badge">CRAG / Self-RAG</span>
+        </div>
+        <div class="repair-stats">
+          <div class="repair-stat">
+            <div class="repair-stat-val" id="valRepairCount">—</div>
+            <div class="repair-stat-label">Repairs Triggered</div>
+          </div>
+          <div class="repair-stat">
+            <div class="repair-stat-val" id="valRepairRate">—</div>
+            <div class="repair-stat-label">Repair Rate</div>
+          </div>
+        </div>
+        <div class="repair-meter-label">Iteration Budget Usage</div>
+        <div class="repair-meter-track">
+          <div class="repair-meter-fill" id="repairMeter" style="width: 0%"></div>
+        </div>
+        <div class="repair-meter-captions">
+          <span>0</span>
+          <span>Max (3)</span>
+        </div>
+      </div>
+
+      <!-- Recent Requests Table -->
+      <div class="chart-card wide" id="recentCard">
+        <div class="chart-header">
+          <h2 class="chart-title">Recent Requests</h2>
+          <span class="chart-badge">Last 10</span>
+        </div>
+        <div class="table-wrapper">
+          <table class="req-table" id="recentTable" aria-label="Recent pipeline requests">
+            <thead>
+              <tr>
+                <th>Query ID</th>
+                <th>Severity</th>
+                <th>Latency</th>
+                <th>Cache</th>
+                <th>Repair</th>
+                <th>Align</th>
+              </tr>
+            </thead>
+            <tbody id="recentTableBody">
+              <tr><td colspan="6" class="empty-row">Waiting for data…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ── Try It Panel ────────────────────────────────── -->
+    <section class="try-panel" aria-label="Live query playground">
+      <div class="try-header">
+        <h2 class="try-title">
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="currentColor" aria-hidden="true">
+            <path d="M3 3h12v2H3V3zm0 4h12v2H3V7zm0 4h8v2H3v-2z"/>
+          </svg>
+          Query Playground
+        </h2>
+        <span class="try-badge">Live Pipeline</span>
+      </div>
+      <div class="try-body">
+        <textarea
+          id="queryInput"
+          class="query-textarea"
+          placeholder="Enter a query to run through the ControlPlane.ai pipeline…"
+          rows="3"
+          aria-label="Query input"
+        ></textarea>
+        <div class="try-controls">
+          <label class="try-option">
+            <input type="number" id="topKInput" value="8" min="1" max="50" aria-label="Top K chunks" />
+            <span>top_k</span>
+          </label>
+          <button class="btn-primary" id="submitQueryBtn" aria-label="Submit query">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+              <path d="M2 2l12 6-12 6V2z"/>
+            </svg>
+            Run Pipeline
+          </button>
+        </div>
+        <div class="try-output" id="tryOutput" aria-live="polite">
+          <span class="try-placeholder">Response will appear here…</span>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ═══════════════════════════════════════════════════════
+       FOOTER
+  ════════════════════════════════════════════════════════ -->
+  <footer class="footer">
+    <span>ControlPlane.ai © 2026</span>
+    <a href="/docs" class="footer-link" target="_blank" rel="noopener">API Docs</a>
+    <a href="/metrics" class="footer-link" target="_blank" rel="noopener">Prometheus</a>
+  </footer>
+
+  <script src="dashboard.js"></script>
+</body>
+</html>

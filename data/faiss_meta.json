@@ -1,0 +1,32 @@
+{
+  "texts": [
+    "ControlPlane.ai is an intelligent AI middleware designed to safely route, filter, and ground LLM queries.",
+    "The ingress stage performs PII masking, intent classification, and constraint decomposition to protect user data.",
+    "The generation stage leverages the Gemini 3.5 Flash model and applies structural formatting checks to ensure reliability.",
+    "Financial reports indicate that Q1 2024 revenue grew by 15% compared to Q3 2023, driven by enterprise AI adoption.",
+    "ControlPlane uses an asynchronous bias monitor powered by IBM AIF360 to ensure demographic and algorithmic fairness."
+  ],
+  "metadata": [
+    {
+      "source": "docs.txt",
+      "topic": "overview"
+    },
+    {
+      "source": "docs.txt",
+      "topic": "ingress"
+    },
+    {
+      "source": "docs.txt",
+      "topic": "generation"
+    },
+    {
+      "source": "financials.pdf",
+      "topic": "financials",
+      "year": 2024
+    },
+    {
+      "source": "docs.txt",
+      "topic": "observability"
+    }
+  ]
+}

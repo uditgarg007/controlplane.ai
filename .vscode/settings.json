@@ -1,0 +1,6 @@
+{
+    "python.defaultInterpreterPath": "C:\\Users\\gargu\\AppData\\Local\\Python\\pythoncore-3.14-64\\python.exe",
+    "python.analysis.extraPaths": [
+        "C:\\Users\\gargu\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages"
+    ]
+}
