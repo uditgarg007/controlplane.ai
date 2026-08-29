@@ -6,11 +6,13 @@ ControlPlane.ai is an enterprise-grade AI security and governance middleware pla
 
 Modern AI applications require varying levels of safety, compliance, and governance depending on whether they are user-facing, internal, real-time, or batch-processed. ControlPlane acts as an intelligent proxy sitting between your application and the LLM (like Gemini), applying multi-stage safety checks:
 
-1. **Ingress Filtering (InputGuard):** Scans the raw user query for prompt injection, jailbreaks, toxicity, and entropy anomalies before it ever reaches the LLM. It also handles PII masking (via Presidio) to ensure sensitive data never leaves your infrastructure.
+1. **Ingress Filtering & Session Risk (InputGuard):** Scans the raw user query for prompt injection, jailbreaks, toxicity, and entropy anomalies before reaching the LLM. It tracks **compounding session risk** across multi-turn interactions, blocking users who attempt slow, cumulative jailbreaks. It also masks PII via Presidio.
 2. **Retrieval (RAG):** Uses FAISS vector search to enrich the query with context.
-3. **Generation & Verification (AlignScore):** Calls the LLM to generate an answer, then uses AlignScore to grade the factual consistency of the response against the retrieved context to detect hallucinations.
-4. **Corrective Repair Loop:** If a response fails the AlignScore threshold or violates formatting constraints, the pipeline enters a Self-RAG/CRAG repair loop, asking the LLM to recursively fix its own mistakes within a strict iteration budget.
-5. **Governance & Human-in-the-Loop (HITL):** Applies role-based policies. Borderline responses (WARN state) can be escalated to a QUARANTINE queue where administrators can manually Review, Approve, Redact, or Block the response.
+3. **Generation & Verification (AlignScore):** Calls the LLM to generate an answer, then uses AlignScore to grade factual consistency against the context to detect hallucinations.
+4. **Corrective Repair Loop:** If a response fails the AlignScore threshold or formatting constraints, the pipeline enters a Self-RAG/CRAG repair loop, asking the LLM to recursively fix its own mistakes.
+5. **AI-as-Judge & Async Bias Monitoring:** Uses a secondary LLM pattern (AI-as-Judge) in a non-blocking background thread to evaluate demographic bias and unfair stereotyping in the response without penalizing user latency.
+6. **Dynamic Policy Governance & Feedback Loops:** Applies role-based policies (strict vs relaxed) backed by a dynamic SQLite database. Administrators can tune thresholds via the **Policy Engine UI**. Active **Feedback Loops** automatically relax thresholds if the Human-in-the-Loop review queue shows a high false-positive rate.
+7. **Human-in-the-Loop (HITL) Queue:** Borderline responses (WARN state) escalate to a QUARANTINE queue where administrators can manually Review, Approve, Redact, or Block the response.
 
 ## Getting Started
 

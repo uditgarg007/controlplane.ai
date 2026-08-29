@@ -164,6 +164,11 @@ async def health() -> dict:
     return {"status": "ok", "service": "controlplane.ai"}
 
 
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    return Response(content=b"", media_type="image/x-icon", status_code=204)
+
+
 @app.get("/metrics", summary="Prometheus metrics scrape endpoint")
 async def prometheus_metrics() -> Response:
     data, content_type = prometheus_output()
