@@ -123,6 +123,19 @@ def record_request(
         n = _counters["total"]
         _token_savings_gauge.set(_cumulative["token_savings"] / max(n, 1))
 
+def update_request_severity(query_id: str, new_severity: str) -> None:
+    """Update the severity of a past request (e.g., after HITL review)."""
+    with _lock:
+        for record in _records:
+            if record["query_id"] == query_id:
+                old_severity = record["severity"]
+                if old_severity == new_severity:
+                    return
+                record["severity"] = new_severity
+                _counters[f"severity_{old_severity}"] = max(0, _counters[f"severity_{old_severity}"] - 1)
+                _counters[f"severity_{new_severity}"] += 1
+                return
+
 
 def get_dashboard_snapshot() -> dict[str, Any]:
     """Return a JSON-serialisable snapshot for the live dashboard."""

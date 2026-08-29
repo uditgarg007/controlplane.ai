@@ -198,6 +198,10 @@ async def get_hitl():
 async def resolve_hitl_item(query_id: str, req: HitlResolveRequest):
     success = Governance.resolve_hitl(query_id, req.action, req.reviewed_by)
     if success:
+        from controlplane.observability.metrics import update_request_severity
+        action_map = {"approve": "pass", "block": "fail", "redact": "redact"}
+        new_severity = action_map.get(req.action.lower(), "pass")
+        update_request_severity(query_id, new_severity)
         return {"status": "ok", "action": req.action}
     raise HTTPException(status_code=404, detail="Item not found or already resolved")
 
