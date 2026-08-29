@@ -18,6 +18,7 @@ User Query
 │  Governance & Policy Engine              │
 │  • Dynamically maps UserContext to       │
 │    a PolicyProfile (thresholds)          │
+│  • Self-adjusts via Active Feedback Loops│
 └────────────────┬─────────────────────────┘
                  │
                  ▼
@@ -25,12 +26,13 @@ User Query
 │  Stage 0: Semantic Cache Check           │
 │  • Exact hash match via Redis            │
 │  • Fuzzy match via in-process vectors    │
-│  • If HIT → return instantly, skip all   │
+│  • If HIT → return instantly, 100% saved │
 └────────────────┬─────────────────────────┘
                  │ cache miss
                  ▼
 ┌──────────────────────────────────────────┐
 │  Stage 1: Ingress & Decomposer          │
+│  • Multi-turn Session Risk tracking     │
 │  • Jailbreak / malicious prompt filter  │
 │  • PII Masking (Presidio + regex)       │
 │  • Intent Classification (BART + rules) │
@@ -78,7 +80,7 @@ User Query
                  ▼
 ┌──────────────────────────────────────────┐
 │  Parallel Observability Layer            │
-│  • Bias audit (AIF360, async)           │
+│  • AI-as-Judge Bias Audit (Async)       │
 │  • Metrics dashboard (live)             │
 │  • Token economics tracking             │
 │  • Audit Logs (SQLite)                  │

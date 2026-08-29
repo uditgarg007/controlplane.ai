@@ -1,5 +1,5 @@
-import sqlite3
 import os
+import sqlite3
 import time
 from typing import Any, Optional, Dict
 from pydantic import BaseModel
@@ -7,7 +7,10 @@ from loguru import logger
 
 from controlplane.config import UserContext, PolicyProfile, UserRole
 
-DB_PATH = os.path.join("data", "governance.db")
+if os.environ.get("VERCEL") == "1":
+    DB_PATH = "/tmp/governance.db"
+else:
+    DB_PATH = os.path.join("data", "governance.db")
 
 _DEFAULT_POLICIES = {
     "strict_external": PolicyProfile(
