@@ -419,7 +419,7 @@ document.getElementById('submitQueryBtn').addEventListener('click', async () => 
 
       // Parse signals out of the block_reason text — they appear after "signals triggered:"
       // The answer text itself contains the structured breakdown.
-      const answerLines = (data.final_answer || '').split('\n').filter(Boolean);
+      const answerLines = (data.answer || '').split('\n').filter(Boolean);
       // Extract the reason line (3rd line after the header + blank + "Reason:")
       const reasonLine  = answerLines.find(l => l.startsWith('Reason:')) || '';
       const signalsLine = answerLines.find(l => l.startsWith('Security signals')) || '';
@@ -474,7 +474,7 @@ document.getElementById('submitQueryBtn').addEventListener('click', async () => 
         : `<span style="color:var(--clr-pass)">✓ Guard: ALLOW</span>`;
 
       output.innerHTML = `
-        <div>${escapeHtml(data.final_answer || '(no answer returned)')}</div>
+        <div>${escapeHtml(data.answer || '(no answer returned)')}</div>
         <div class="meta-row">
           <span>Severity: <strong class="${sevClass}">${(data.severity || '').toUpperCase()}</strong></span>
           <span>Latency: <strong>${data.total_latency_ms?.toFixed(1) || elapsed} ms</strong></span>
