@@ -152,6 +152,7 @@ def run_retrieval(ingress: IngressResult, top_k: int = 8) -> RetrievalResult:
     raw_token_count = _estimate_tokens(raw_text)
 
     compressed_text, compressed_tokens = _compress_context(raw_text, raw_chunks)
+    compressed_tokens = min(compressed_tokens, raw_token_count)
 
     ratio = max(0.0, round(1 - compressed_tokens / max(raw_token_count, 1), 4))
 
