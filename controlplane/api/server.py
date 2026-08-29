@@ -205,6 +205,41 @@ async def resolve_hitl_item(query_id: str, req: HitlResolveRequest):
         return {"status": "ok", "action": req.action}
     raise HTTPException(status_code=404, detail="Item not found or already resolved")
 
+@app.get("/api/policy", summary="Get all policies")
+async def get_policies():
+    import sqlite3
+    from controlplane.core.governance import DB_PATH
+    try:
+        with sqlite3.connect(DB_PATH) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute("SELECT * FROM policies").fetchall()
+            return JSONResponse({"policies": [dict(r) for r in rows]})
+    except Exception as e:
+        logger.error(f"Failed to fetch policies: {e}")
+        return JSONResponse({"policies": []})
+
+class PolicyUpdateRequest(BaseModel):
+    align_score_threshold: float
+    guard_block_composite_threshold: float
+    guard_block_signal_threshold: float
+    pii_masking_enabled: bool
+    quarantine_on_warn: bool
+
+@app.put("/api/policy/{name}", summary="Update a policy profile")
+async def update_policy(name: str, req: PolicyUpdateRequest):
+    from controlplane.config import PolicyProfile
+    profile = PolicyProfile(
+        name=name,
+        align_score_threshold=req.align_score_threshold,
+        guard_block_composite_threshold=req.guard_block_composite_threshold,
+        guard_block_signal_threshold=req.guard_block_signal_threshold,
+        pii_masking_enabled=req.pii_masking_enabled,
+        quarantine_on_warn=req.quarantine_on_warn
+    )
+    from controlplane.core.governance import PolicyEngine
+    PolicyEngine.update_policy(profile)
+    return {"status": "ok", "policy": name}
+
 
 # ─────────────────────────────────────────────────────────────
 # Mount static dashboard (MUST be AFTER all API routes)

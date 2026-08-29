@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ControlPlane.ai — Policy Engine</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="dashboard.css" />
+  <style>
+    .policy-container {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      margin-top: 20px;
+    }
+    .policy-card {
+      background: var(--clr-surface);
+      border: 1px solid var(--clr-border);
+      border-radius: var(--radius-md);
+      padding: 20px;
+    }
+    .policy-header {
+      font-size: 1.2rem;
+      font-weight: 600;
+      margin-bottom: 15px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--clr-border);
+      text-transform: capitalize;
+    }
+    .form-group {
+      margin-bottom: 15px;
+    }
+    .form-group label {
+      display: block;
+      font-size: 0.8rem;
+      color: var(--clr-text-sub);
+      margin-bottom: 5px;
+    }
+    .form-group input[type="number"] {
+      width: 100%;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid var(--clr-border);
+      color: var(--clr-text);
+      padding: 8px;
+      border-radius: var(--radius-sm);
+    }
+    .form-group input[type="checkbox"] {
+      margin-right: 10px;
+    }
+    .btn-save {
+      background: var(--clr-primary);
+      color: white;
+      border: none;
+      padding: 10px 15px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-weight: 600;
+      width: 100%;
+    }
+    .btn-save:hover {
+      opacity: 0.9;
+    }
+    .toast {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      background: var(--clr-pass);
+      color: white;
+      padding: 10px 20px;
+      border-radius: var(--radius-sm);
+      opacity: 0;
+      transition: opacity 0.3s;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <header class="header">
+    <div class="header-inner">
+      <div class="logo-group">
+        <span class="logo-text">ControlPlane<span class="logo-dot">.ai</span> / Policy Engine</span>
+      </div>
+      <div class="header-right">
+        <a href="/dashboard/" style="color: var(--clr-primary); text-decoration: none;">← Back to Dashboard</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="main">
+    <section>
+      <h2 style="color: var(--clr-text);">Active Governance Policies</h2>
+      <p style="color: var(--clr-text-sub); font-size: 0.9rem;">
+        Modify the thresholds dynamically. Changes are saved to the database immediately and will auto-adjust if feedback loops are active.
+      </p>
+      
+      <div id="policyContainer" class="policy-container">
+        <!-- populated by JS -->
+      </div>
+    </section>
+  </main>
+  
+  <div id="toast" class="toast">Policy updated successfully!</div>
+
+  <script src="policy.js"></script>
+</body>
+</html>

@@ -111,49 +111,21 @@ def _audit_worker(query_id: str, output_text: str, metadata: dict) -> None:
 def _analyse_bias(output_text: str, metadata: dict) -> tuple[bool, list[str]]:
     """
     Core bias analysis logic.
-
-    When AIF360 is available: runs a statistical fairness check.
-    Fallback: keyword-based heuristic for known demographic stereotypes.
+    Uses AI-as-Judge pattern for subjective evaluation and heuristic fallbacks.
     """
     signals: list[str] = []
+    
+    # 1. AI-as-Judge pattern
+    raw_query = metadata.get("raw_query", "")
+    if raw_query:
+        from controlplane.core.judge import evaluate_bias_and_safety
+        report = evaluate_bias_and_safety(raw_query, output_text)
+        if report.demographic_bias_detected:
+            signals.append(f"AI-Judge: Demographic bias detected: {report.details}")
+        if report.sentiment_bias_detected:
+            signals.append(f"AI-Judge: Sentiment bias detected: {report.details}")
 
-    if _aif360_available and "labels" in metadata and "protected" in metadata:
-        # AIF360 expects a labelled dataset with protected attribute columns
-        try:
-            import pandas as pd
-
-            df = pd.DataFrame(metadata["labels"])
-            protected_attrs = metadata["protected"]
-            label_col = metadata.get("label_col", "label")
-            favorable_val = metadata.get("favorable_value", 1)
-
-            dataset = BinaryLabelDataset(
-                df=df,
-                label_names=[label_col],
-                protected_attribute_names=protected_attrs,
-                favorable_label=favorable_val,
-                unfavorable_label=1 - favorable_val,
-            )
-
-            privileged = [{a: 1 for a in protected_attrs}]
-            unprivileged = [{a: 0 for a in protected_attrs}]
-            metric = BinaryLabelDatasetMetric(
-                dataset,
-                unprivileged_groups=unprivileged,
-                privileged_groups=privileged,
-            )
-
-            di = metric.disparate_impact()
-            spd = metric.statistical_parity_difference()
-
-            if abs(di - 1.0) > 0.20:   # >20% disparity impact
-                signals.append(f"Disparate impact: {di:.3f} (ideal=1.0)")
-            if abs(spd) > 0.10:         # >10% statistical parity difference
-                signals.append(f"Statistical parity difference: {spd:.3f}")
-        except Exception as exc:
-            logger.warning(f"[BiasMonitor] AIF360 metric failed: {exc}")
-
-    # Heuristic fallback: known stereotype phrases
+    # 2. Heuristic fallback: known stereotype phrases
     STEREOTYPE_PHRASES = [
         "women are less capable",
         "men are better at",

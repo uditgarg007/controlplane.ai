@@ -62,7 +62,7 @@ def run_pipeline(
         return resp
 
     # Stage 1: Ingress
-    ingress = run_ingress(raw_query, policy=policy)
+    ingress = run_ingress(raw_query, policy=policy, user_context=user_context)
     latency["ingress"] = ingress.latency_ms
 
     if ingress.blocked:
@@ -153,7 +153,7 @@ def run_pipeline(
     ):
         cache_store(raw_query, final_answer)
 
-    submit_for_audit(query_id, final_answer)
+    submit_for_audit(query_id, final_answer, metadata={"raw_query": raw_query})
 
     total_ms = _elapsed_ms(pipeline_t0)
     latency["total"] = total_ms

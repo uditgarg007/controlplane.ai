@@ -21,7 +21,7 @@ from typing import Any
 
 from loguru import logger
 
-from controlplane.config import Config, IngressResult, QueryIntent, PolicyProfile
+from controlplane.config import Config, IngressResult, QueryIntent, PolicyProfile, UserContext
 from controlplane.core import input_guard as _guard
 
 # ─────────────────────────────────────────────────────────────
@@ -169,7 +169,7 @@ _NEGATIVE_MARKERS: list[str] = [
 # Public API
 # ─────────────────────────────────────────────────────────────
 
-def run_ingress(raw_query: str, policy: PolicyProfile | None = None) -> IngressResult:
+def run_ingress(raw_query: str, policy: PolicyProfile | None = None, user_context: UserContext | None = None) -> IngressResult:
     """
     Full ingress pipeline for a single user query.
 
@@ -192,6 +192,23 @@ def run_ingress(raw_query: str, policy: PolicyProfile | None = None) -> IngressR
         {"name": s.name, "score": s.score, "triggered": s.triggered, "detail": s.detail}
         for s in guard_result.signals
     ]
+
+    # Session risk tracking
+    if user_context and user_context.session_id and policy:
+        from controlplane.core.governance import Governance
+        new_risk = Governance.update_session_risk(user_context.session_id, guard_result.risk_score)
+        if new_risk >= policy.guard_block_composite_threshold * 2.5:
+            return IngressResult(
+                original_query=raw_query,
+                clean_query="",
+                intent=QueryIntent.MALICIOUS,
+                blocked=True,
+                block_reason=f"Compounding session risk exceeded threshold ({new_risk:.2f}).",
+                guard_risk_score=new_risk,
+                guard_verdict="block",
+                guard_signals=_guard_signals,
+                latency_ms=_elapsed_ms(t0),
+            )
 
     if guard_result.blocked:
         return IngressResult(

@@ -7,8 +7,9 @@ from loguru import logger
 
 from controlplane.config import UserContext, PolicyProfile, UserRole
 
-# Define default policy profiles
-_POLICIES = {
+DB_PATH = os.path.join("data", "governance.db")
+
+_DEFAULT_POLICIES = {
     "strict_external": PolicyProfile(
         name="strict_external",
         align_score_threshold=0.75,
@@ -26,20 +27,6 @@ _POLICIES = {
         quarantine_on_warn=False,
     ),
 }
-
-class PolicyEngine:
-    @staticmethod
-    def get_policy(context: UserContext) -> PolicyProfile:
-        """Dynamically resolve policy based on user context."""
-        if context.role == UserRole.INTERNAL or context.role == UserRole.ADMIN:
-            return _POLICIES["relaxed_internal"]
-        return _POLICIES["strict_external"]
-
-
-# ─────────────────────────────────────────────────────────────
-# Database Init & Models
-# ─────────────────────────────────────────────────────────────
-DB_PATH = os.path.join("data", "governance.db")
 
 def init_db():
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
@@ -65,16 +52,73 @@ def init_db():
                 status TEXT,
                 created_at REAL,
                 reviewed_by TEXT,
-                review_action TEXT
+                review_action TEXT,
+                policy_used TEXT
             )
         ''')
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS policies (
+                name TEXT PRIMARY KEY,
+                align_score_threshold REAL,
+                guard_block_composite_threshold REAL,
+                guard_block_signal_threshold REAL,
+                pii_masking_enabled INTEGER,
+                quarantine_on_warn INTEGER
+            )
+        ''')
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS session_risk (
+                session_id TEXT PRIMARY KEY,
+                cumulative_risk REAL,
+                query_count INTEGER,
+                last_updated REAL
+            )
+        ''')
+        # Insert defaults if empty
+        cursor.execute("SELECT count(*) FROM policies")
+        if cursor.fetchone()[0] == 0:
+            for p in _DEFAULT_POLICIES.values():
+                cursor.execute(
+                    "INSERT INTO policies (name, align_score_threshold, guard_block_composite_threshold, guard_block_signal_threshold, pii_masking_enabled, quarantine_on_warn) VALUES (?, ?, ?, ?, ?, ?)",
+                    (p.name, p.align_score_threshold, p.guard_block_composite_threshold, p.guard_block_signal_threshold, int(p.pii_masking_enabled), int(p.quarantine_on_warn))
+                )
         conn.commit()
 
 init_db()
 
-# ─────────────────────────────────────────────────────────────
-# Governance Operations
-# ─────────────────────────────────────────────────────────────
+class PolicyEngine:
+    @staticmethod
+    def get_policy(context: UserContext) -> PolicyProfile:
+        policy_name = "relaxed_internal" if context.role in [UserRole.INTERNAL, UserRole.ADMIN] else "strict_external"
+        try:
+            with sqlite3.connect(DB_PATH, timeout=5.0) as conn:
+                conn.row_factory = sqlite3.Row
+                row = conn.execute("SELECT * FROM policies WHERE name = ?", (policy_name,)).fetchone()
+                if row:
+                    return PolicyProfile(
+                        name=row["name"],
+                        align_score_threshold=row["align_score_threshold"],
+                        guard_block_composite_threshold=row["guard_block_composite_threshold"],
+                        guard_block_signal_threshold=row["guard_block_signal_threshold"],
+                        pii_masking_enabled=bool(row["pii_masking_enabled"]),
+                        quarantine_on_warn=bool(row["quarantine_on_warn"])
+                    )
+        except Exception as e:
+            logger.error(f"Failed to fetch policy from DB: {e}")
+        return _DEFAULT_POLICIES[policy_name]
+
+    @staticmethod
+    def update_policy(profile: PolicyProfile):
+        try:
+            with sqlite3.connect(DB_PATH, timeout=5.0) as conn:
+                conn.execute(
+                    "UPDATE policies SET align_score_threshold=?, guard_block_composite_threshold=?, guard_block_signal_threshold=?, pii_masking_enabled=?, quarantine_on_warn=? WHERE name=?",
+                    (profile.align_score_threshold, profile.guard_block_composite_threshold, profile.guard_block_signal_threshold, int(profile.pii_masking_enabled), int(profile.quarantine_on_warn), profile.name)
+                )
+        except Exception as e:
+            logger.error(f"Failed to update policy: {e}")
+
+
 class Governance:
     @staticmethod
     def log_audit(query_id: str, user_id: str, action: str, details: str = ""):
@@ -88,12 +132,12 @@ class Governance:
             logger.error(f"Failed to write audit log: {e}")
 
     @staticmethod
-    def enqueue_hitl(query_id: str, original_query: str, raw_output: str, severity: str):
+    def enqueue_hitl(query_id: str, original_query: str, raw_output: str, severity: str, policy_used: str = "strict_external"):
         try:
             with sqlite3.connect(DB_PATH, timeout=5.0) as conn:
                 conn.execute(
-                    "INSERT INTO hitl_queue (query_id, original_query, raw_output, severity, status, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-                    (query_id, original_query, raw_output, severity, "PENDING", time.time())
+                    "INSERT INTO hitl_queue (query_id, original_query, raw_output, severity, status, created_at, policy_used) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (query_id, original_query, raw_output, severity, "PENDING", time.time(), policy_used)
                 )
             logger.info(f"Query {query_id} added to HITL quarantine queue.")
         except Exception as e:
@@ -115,8 +159,14 @@ class Governance:
     @staticmethod
     def resolve_hitl(query_id: str, action: str, reviewed_by: str = "admin") -> bool:
         resolved = False
+        policy_used = "strict_external"
         try:
             with sqlite3.connect(DB_PATH, timeout=5.0) as conn:
+                # get policy used
+                row = conn.execute("SELECT policy_used FROM hitl_queue WHERE query_id = ?", (query_id,)).fetchone()
+                if row and row[0]:
+                    policy_used = row[0]
+
                 cursor = conn.execute(
                     "UPDATE hitl_queue SET status = ?, review_action = ?, reviewed_by = ? WHERE query_id = ?",
                     ("RESOLVED", action, reviewed_by, query_id)
@@ -126,8 +176,50 @@ class Governance:
             
             if resolved:
                 Governance.log_audit(query_id, reviewed_by, f"HITL_RESOLVED_{action.upper()}", f"Reviewer action: {action}")
+                # Feedback loop: check if we should relax threshold for this policy
+                Governance._evaluate_feedback_loop(policy_used)
                 return True
             return False
         except Exception as e:
             logger.error(f"Failed to resolve HITL item: {e}")
             return False
+
+    @staticmethod
+    def _evaluate_feedback_loop(policy_name: str):
+        """Active Feedback Loop: dynamically adjust thresholds if false-positive rate is high."""
+        try:
+            with sqlite3.connect(DB_PATH, timeout=5.0) as conn:
+                # Get last 20 resolved items for this policy
+                cursor = conn.execute(
+                    "SELECT review_action FROM hitl_queue WHERE status = 'RESOLVED' AND policy_used = ? ORDER BY created_at DESC LIMIT 20",
+                    (policy_name,)
+                )
+                actions = [row[0] for row in cursor.fetchall()]
+                if len(actions) >= 10:
+                    approves = actions.count("approve")
+                    if approves / len(actions) > 0.8:
+                        # 80%+ were approved (false positives). Relax the threshold slightly.
+                        logger.info(f"Feedback loop: high false positive rate detected for {policy_name}. Relaxing thresholds.")
+                        conn.execute("UPDATE policies SET guard_block_composite_threshold = guard_block_composite_threshold + 0.02 WHERE name = ?", (policy_name,))
+        except Exception as e:
+            logger.error(f"Feedback loop failed: {e}")
+
+    @staticmethod
+    def update_session_risk(session_id: str, risk_score: float) -> float:
+        """Track compounding multi-turn risk. Returns new cumulative risk."""
+        try:
+            with sqlite3.connect(DB_PATH, timeout=5.0) as conn:
+                row = conn.execute("SELECT cumulative_risk, query_count FROM session_risk WHERE session_id = ?", (session_id,)).fetchone()
+                if row:
+                    new_risk = row[0] + risk_score
+                    new_count = row[1] + 1
+                    conn.execute("UPDATE session_risk SET cumulative_risk=?, query_count=?, last_updated=? WHERE session_id=?", 
+                                 (new_risk, new_count, time.time(), session_id))
+                else:
+                    new_risk = risk_score
+                    conn.execute("INSERT INTO session_risk (session_id, cumulative_risk, query_count, last_updated) VALUES (?, ?, ?, ?)",
+                                 (session_id, risk_score, 1, time.time()))
+                return new_risk
+        except Exception as e:
+            logger.error(f"Session tracking failed: {e}")
+            return risk_score

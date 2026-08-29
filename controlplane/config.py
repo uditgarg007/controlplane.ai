@@ -41,6 +41,7 @@ class UserRole(str, Enum):
 
 class UserContext(BaseModel):
     user_id: str = "anonymous"
+    session_id: str = "default"
     role: UserRole = UserRole.EXTERNAL
     geography: str = "US"
 
