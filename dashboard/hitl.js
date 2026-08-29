@@ -72,5 +72,12 @@ function escapeHtml(str) {
 
 document.addEventListener('DOMContentLoaded', () => {
   fetchQueue();
-  setInterval(fetchQueue, 5000);
+  setInterval(() => {
+    // Prevent refresh if user is currently editing a redact field
+    const active = document.activeElement;
+    if (active && active.getAttribute('contenteditable') === 'true') {
+      return;
+    }
+    fetchQueue();
+  }, 5000);
 });

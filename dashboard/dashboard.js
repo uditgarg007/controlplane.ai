@@ -199,13 +199,11 @@ function renderSeverityDonut(dist) {
 
   // Update legend
   document.getElementById('legPass').textContent = pass.toLocaleString();
-  document.getElementById('legWarn').textContent = warn.toLocaleString();
   document.getElementById('legQuarantine').textContent = quarantine.toLocaleString();
   document.getElementById('legRedact').textContent = redact.toLocaleString();
   document.getElementById('legFail').textContent = fail.toLocaleString();
 
   document.getElementById('legPassPct').textContent = `(${((pass / total) * 100).toFixed(1)}%)`;
-  document.getElementById('legWarnPct').textContent = `(${((warn / total) * 100).toFixed(1)}%)`;
   document.getElementById('legQuarantinePct').textContent = `(${((quarantine / total) * 100).toFixed(1)}%)`;
   document.getElementById('legRedactPct').textContent = `(${((redact / total) * 100).toFixed(1)}%)`;
   document.getElementById('legFailPct').textContent = `(${((fail / total) * 100).toFixed(1)}%)`;
@@ -223,7 +221,6 @@ function renderSeverityDonut(dist) {
 
   const segments = [
     { frac: pass / total, color: '#34d399' },
-    { frac: warn / total, color: '#fbbf24' },
     { frac: quarantine / total, color: '#a855f7' },
     { frac: redact / total, color: '#6b7280' },
     { frac: fail / total, color: '#f87171' },
@@ -362,12 +359,19 @@ function renderTokenBars(data) {
   document.getElementById('valRawTokens').textContent = raw > 0 ? `${raw.toLocaleString()} tokens` : '— tokens';
   document.getElementById('valCompressedTokens').textContent = comp > 0 ? `${comp.toLocaleString()} tokens` : '— tokens';
 
-  const compPct = raw > 0 ? Math.round((comp / raw) * 100) : 0;
+  const compPct = raw > 0 ? Math.min(Math.round((comp / raw) * 100), 100) : 0;
   document.getElementById('barCompressed').style.width = `${compPct}%`;
 
-  const savedRatio = Math.max(data.token_economics.avg_compression_ratio, 0);
+  const savedRatio = Math.max(data.token_economics.avg_compression_ratio || 0, 0);
   const saved = Math.round(savedRatio * 100);
-  document.getElementById('tokenSavingsText').textContent = `${saved}% saved on average`;
+  
+  if (saved > 0) {
+    document.getElementById('tokenSavingsText').textContent = `${saved}% saved on average`;
+    document.getElementById('tokenSavingsBadge').style.color = '#34d399';
+  } else {
+    document.getElementById('tokenSavingsText').textContent = `0% saved on average`;
+    document.getElementById('tokenSavingsBadge').style.color = 'var(--clr-text-dim)';
+  }
 }
 
 // ──────────────────────────────────────────────────────────
