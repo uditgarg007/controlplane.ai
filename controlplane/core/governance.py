@@ -1,5 +1,5 @@
-import os
 import sqlite3
+import os
 import time
 from typing import Any, Optional, Dict
 from pydantic import BaseModel
@@ -7,10 +7,7 @@ from loguru import logger
 
 from controlplane.config import UserContext, PolicyProfile, UserRole
 
-if os.environ.get("VERCEL") == "1":
-    DB_PATH = "/tmp/governance.db"
-else:
-    DB_PATH = os.path.join("data", "governance.db")
+DB_PATH = os.path.join("data", "governance.db")
 
 _DEFAULT_POLICIES = {
     "strict_external": PolicyProfile(
@@ -85,6 +82,12 @@ def init_db():
                     "INSERT INTO policies (name, align_score_threshold, guard_block_composite_threshold, guard_block_signal_threshold, pii_masking_enabled, quarantine_on_warn) VALUES (?, ?, ?, ?, ?, ?)",
                     (p.name, p.align_score_threshold, p.guard_block_composite_threshold, p.guard_block_signal_threshold, int(p.pii_masking_enabled), int(p.quarantine_on_warn))
                 )
+        
+        try:
+            cursor.execute("ALTER TABLE hitl_queue ADD COLUMN policy_used TEXT")
+        except sqlite3.OperationalError:
+            pass
+
         conn.commit()
 
 init_db()

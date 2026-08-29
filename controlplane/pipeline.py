@@ -148,7 +148,7 @@ def run_pipeline(
         final_severity = SeverityLevel.QUARANTINE
 
     if final_severity == SeverityLevel.QUARANTINE:
-        Governance.enqueue_hitl(query_id, raw_query, final_answer, final_severity.value)
+        Governance.enqueue_hitl(query_id, raw_query, final_answer, final_severity.value, policy.name)
         Governance.log_audit(query_id, user_context.user_id, "QUARANTINED", "Response flagged for HITL review.")
         final_answer = "[QUARANTINED] This response has been flagged for human review due to policy constraints."
 

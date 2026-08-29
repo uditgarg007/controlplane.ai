@@ -45,7 +45,7 @@ try:
     from openai import OpenAI  # type: ignore
 
     _llm_client = OpenAI(
-        api_key=Config.GEMINI_API_KEY or "dummy_key_to_prevent_startup_crash",
+        api_key=Config.GEMINI_API_KEY,
         base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
     )
     _openai_available = True

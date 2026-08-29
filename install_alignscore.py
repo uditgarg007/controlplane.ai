@@ -20,13 +20,11 @@ def main():
         with open(toml_path, "r", encoding="utf-8") as f:
             content = f.read()
 
-        # Remove specific constraints
+        # Remove the torch <2 constraint
         content = content.replace('"torch>=1.12.1,<2"', '"torch>=1.12.1"')
-        content = content.replace('"protobuf<=3.20"', '"protobuf"')
         
-        # Strip all other upper bound constraints (e.g. ,<5", ,<2")
-        import re
-        content = re.sub(r',<[0-9\.]+"', '"', content)
+        # Remove the protobuf<=3.20 constraint (to avoid installation issues on newer python versions)
+        content = content.replace('"protobuf<=3.20"', '"protobuf"')
 
         with open(toml_path, "w", encoding="utf-8") as f:
             f.write(content)
