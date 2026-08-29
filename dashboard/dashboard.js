@@ -81,7 +81,7 @@ function generateDemoData() {
   const quarantine = Math.floor(total * 0.05);
   const redact = Math.floor(total * 0.02);
   const fail = total - pass - warn - quarantine - redact;
-  const repairs = fail;
+  const repairs = Math.floor(fail * 0.8);
 
   const recent = Array.from({ length: 10 }, (_, i) => ({
     query_id: crypto.randomUUID ? crypto.randomUUID() : `demo-${Date.now()}-${i}`,
@@ -90,6 +90,8 @@ function generateDemoData() {
     cache_hit: Math.random() > 0.4,
     repair_iterations: Math.random() > 0.8 ? Math.floor(Math.random() * 3) + 1 : 0,
     align_score: 0.6 + Math.random() * 0.4,
+    guard_risk_score: Math.random() * 0.3,
+    guard_verdict: 'allow',
   }));
 
   return {
@@ -121,6 +123,34 @@ function renderAll(data) {
   renderTokenBars(data);
   renderRepairStats(data);
   renderRecentTable(data.recent_requests || []);
+  renderHitlBadge();
+}
+
+// ──────────────────────────────────────────────────────────
+// HITL Queue Badge
+// ──────────────────────────────────────────────────────────
+async function renderHitlBadge() {
+  const linkEl = document.getElementById('hitlLink');
+  if (!linkEl) return;
+  try {
+    const res = await fetch(`${API_BASE}/api/hitl`);
+    if (!res.ok) return;
+    const data = await res.json();
+    const count = (data.items || []).length;
+    let badge = linkEl.querySelector('.hitl-count-badge');
+    if (count > 0) {
+      if (!badge) {
+        badge = document.createElement('span');
+        badge.className = 'hitl-count-badge';
+        linkEl.appendChild(badge);
+      }
+      badge.textContent = count;
+    } else if (badge) {
+      badge.remove();
+    }
+  } catch (e) {
+    // API offline — silently ignore
+  }
 }
 
 // ──────────────────────────────────────────────────────────
@@ -131,7 +161,8 @@ function renderKPIs(data) {
   animateNumber('valLatency', data.latency.avg_ms, v => `${v.toFixed(0)}<small>ms</small>`);
   animateNumber('valCacheRate', data.cache.hit_rate * 100, v => `${v.toFixed(1)}<small>%</small>`);
   animateNumber('valAlign', data.grounding.avg_align_score, v => v.toFixed(3));
-  animateNumber('valSavings', data.token_economics.avg_compression_ratio * 100, v => `${v.toFixed(1)}<small>%</small>`);
+  const savingsVal = Math.max(data.token_economics.avg_compression_ratio * 100, 0);
+  animateNumber('valSavings', savingsVal, v => `${v.toFixed(1)}<small>%</small>`);
 }
 
 function animateNumber(id, target, fmt) {
@@ -321,20 +352,21 @@ function renderLatencySparkline(data) {
 // Token Bars
 // ──────────────────────────────────────────────────────────
 function renderTokenBars(data) {
-  // Use last request's token economics if available
+  // Use last non-cache-hit request's token economics if available
   const recent = data.recent_requests || [];
-  const last = recent[recent.length - 1];
+  const last = recent.slice().reverse().find(r => r.token_economics && r.token_economics.raw_token_count > 0);
   const eco = (last && last.token_economics) || {};
-  const raw = eco.raw_token_count || 1000;
-  const comp = eco.compressed_token_count || Math.round(raw * (1 - data.token_economics.avg_compression_ratio));
+  const raw = eco.raw_token_count || 0;
+  const comp = eco.compressed_token_count || 0;
 
-  document.getElementById('valRawTokens').textContent = `${raw.toLocaleString()} tokens`;
-  document.getElementById('valCompressedTokens').textContent = `${comp.toLocaleString()} tokens`;
+  document.getElementById('valRawTokens').textContent = raw > 0 ? `${raw.toLocaleString()} tokens` : '— tokens';
+  document.getElementById('valCompressedTokens').textContent = comp > 0 ? `${comp.toLocaleString()} tokens` : '— tokens';
 
-  const compPct = Math.round((comp / raw) * 100);
+  const compPct = raw > 0 ? Math.round((comp / raw) * 100) : 0;
   document.getElementById('barCompressed').style.width = `${compPct}%`;
 
-  const saved = Math.round(data.token_economics.avg_compression_ratio * 100);
+  const savedRatio = Math.max(data.token_economics.avg_compression_ratio, 0);
+  const saved = Math.round(savedRatio * 100);
   document.getElementById('tokenSavingsText').textContent = `${saved}% saved on average`;
 }
 
@@ -360,7 +392,7 @@ function renderRepairStats(data) {
 function renderRecentTable(rows) {
   const tbody = document.getElementById('recentTableBody');
   if (!rows.length) {
-    tbody.innerHTML = '<tr><td colspan="6" class="empty-row">No requests yet…</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" class="empty-row">No requests yet…</td></tr>';
     return;
   }
 
@@ -371,6 +403,8 @@ function renderRecentTable(rows) {
     const qid = (r.query_id || '').slice(0, 8) + '…';
     const repairs = r.repair_iterations || 0;
     const cacheHit = r.cache_hit;
+    const gv = r.guard_verdict || 'allow';
+    const gvClass = gv === 'block' ? 'fail' : gv === 'warn' ? 'warn' : 'pass';
 
     return `
       <tr>
@@ -380,6 +414,7 @@ function renderRecentTable(rows) {
         <td class="${cacheHit ? 'cache-hit' : 'cache-miss'}">${cacheHit ? '✓ HIT' : '✗ MISS'}</td>
         <td>${repairs > 0 ? `⟳ ${repairs}` : '—'}</td>
         <td>${align}</td>
+        <td><span class="sev-pill ${gvClass}" style="font-size:0.6rem">${gv.toUpperCase()}</span></td>
       </tr>
     `;
   }).join('');
@@ -467,7 +502,7 @@ document.getElementById('submitQueryBtn').addEventListener('click', async () => 
       `;
     } else {
       // ── Normal (allowed) response ─────────────────────────
-      const sevClass = data.severity || 'pass';
+      const sev = data.severity || 'pass';
       const guardVerdict = data.guard_verdict || 'allow';
       const guardBadge = guardVerdict === 'warn'
         ? `<span title="Guard issued a warning but allowed this request" style="color:var(--clr-warn)">⚠ Guard: WARN (${(data.guard_risk_score||0).toFixed(2)})</span>`
@@ -476,7 +511,7 @@ document.getElementById('submitQueryBtn').addEventListener('click', async () => 
       output.innerHTML = `
         <div>${escapeHtml(data.answer || '(no answer returned)')}</div>
         <div class="meta-row">
-          <span>Severity: <strong class="${sevClass}">${(data.severity || '').toUpperCase()}</strong></span>
+          <span>Severity: <span class="sev-pill ${sev}">${sev.toUpperCase()}</span></span>
           <span>Latency: <strong>${data.total_latency_ms?.toFixed(1) || elapsed} ms</strong></span>
           <span>Cache: <strong>${data.cache_hit ? '✓ HIT' : '✗ MISS'}</strong></span>
           <span>Align: <strong>${(data.align_score || 0).toFixed(3)}</strong></span>

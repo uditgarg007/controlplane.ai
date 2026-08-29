@@ -201,6 +201,9 @@ def _emit_metrics(resp: PipelineResponse, align_score: float) -> None:
         token_economics=resp.token_economics,
         repair_iterations=resp.repair_iterations,
         align_score=align_score,
+        repair_triggered=resp.repair_triggered,
+        guard_risk_score=resp.guard_risk_score,
+        guard_verdict=resp.guard_verdict,
     )
 
 def _elapsed_ms(t0: float) -> float:

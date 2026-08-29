@@ -81,6 +81,9 @@ def record_request(
     token_economics: dict[str, Any],
     repair_iterations: int,
     align_score: float,
+    repair_triggered: bool = False,
+    guard_risk_score: float = 0.0,
+    guard_verdict: str = "allow",
 ) -> None:
     """Record a completed pipeline request."""
     record = {
@@ -93,6 +96,8 @@ def record_request(
         "token_economics": token_economics,
         "repair_iterations": repair_iterations,
         "align_score": align_score,
+        "guard_risk_score": guard_risk_score,
+        "guard_verdict": guard_verdict,
     }
 
     with _lock:
@@ -100,6 +105,8 @@ def record_request(
         _counters["total"] += 1
         _counters[f"severity_{severity}"] += 1
         _counters["cache_hit" if cache_hit else "cache_miss"] += 1
+        if repair_triggered:
+            _counters["repairs"] += 1
         _cumulative["total_latency_ms"] += total_latency_ms
         _cumulative["align_score"] += align_score
         raw = token_economics.get("raw_token_count", 0)
@@ -123,34 +130,34 @@ def get_dashboard_snapshot() -> dict[str, Any]:
         n = _counters["total"] or 1  # avoid div-by-zero
         recent = list(_records)[-10:]  # last 10 for sparklines
 
-    return {
-        "total_requests": _counters["total"],
-        "severity_distribution": {
-            "pass": _counters["severity_pass"],
-            "warn": _counters["severity_warn"],
-            "fail": _counters["severity_fail"],
-            "quarantine": _counters["severity_quarantine"],
-            "redact": _counters["severity_redact"],
-        },
-        "cache": {
-            "hits": _counters["cache_hit"],
-            "misses": _counters["cache_miss"],
-            "hit_rate": round(_counters["cache_hit"] / n, 4),
-        },
-        "latency": {
-            "avg_ms": round(_cumulative["total_latency_ms"] / n, 2),
-        },
-        "token_economics": {
-            "avg_compression_ratio": round(_cumulative["token_savings"] / n, 4),
-        },
-        "grounding": {
-            "avg_align_score": round(_cumulative["align_score"] / n, 4),
-        },
-        "repair_loop": {
-            "requests_repaired": _counters["severity_fail"],
-        },
-        "recent_requests": recent,
-    }
+        return {
+            "total_requests": _counters["total"],
+            "severity_distribution": {
+                "pass": _counters["severity_pass"],
+                "warn": _counters["severity_warn"],
+                "fail": _counters["severity_fail"],
+                "quarantine": _counters["severity_quarantine"],
+                "redact": _counters["severity_redact"],
+            },
+            "cache": {
+                "hits": _counters["cache_hit"],
+                "misses": _counters["cache_miss"],
+                "hit_rate": round(_counters["cache_hit"] / n, 4),
+            },
+            "latency": {
+                "avg_ms": round(_cumulative["total_latency_ms"] / n, 2),
+            },
+            "token_economics": {
+                "avg_compression_ratio": max(round(_cumulative["token_savings"] / n, 4), 0.0),
+            },
+            "grounding": {
+                "avg_align_score": round(_cumulative["align_score"] / n, 4),
+            },
+            "repair_loop": {
+                "requests_repaired": _counters["repairs"],
+            },
+            "recent_requests": recent,
+        }
 
 
 def prometheus_output() -> tuple[bytes, str]:

@@ -70,4 +70,7 @@ function escapeHtml(str) {
     .replace(/"/g, '&quot;');
 }
 
-document.addEventListener('DOMContentLoaded', fetchQueue);
+document.addEventListener('DOMContentLoaded', () => {
+  fetchQueue();
+  setInterval(fetchQueue, 5000);
+});
