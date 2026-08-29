@@ -362,8 +362,8 @@ function renderTokenBars(data) {
   const compPct = raw > 0 ? Math.min(Math.round((comp / raw) * 100), 100) : 0;
   document.getElementById('barCompressed').style.width = `${compPct}%`;
 
-  const savedRatio = Math.max(data.token_economics.avg_compression_ratio || 0, 0);
-  const saved = Math.round(savedRatio * 100);
+  const currentSavedRatio = raw > 0 ? Math.max(1 - (comp / raw), 0) : 0;
+  const saved = Math.round(currentSavedRatio * 100);
   
   const tokenSavingsText = document.getElementById('tokenSavingsText');
   const tokenSavingsBadge = document.getElementById('tokenSavingsBadge');
@@ -373,10 +373,10 @@ function renderTokenBars(data) {
     tokenSavingsText.innerHTML = `<strong>100% saved</strong> (Cache Hit!)`;
     tokenSavingsBadge.style.color = '#10b981'; // vibrant green
   } else if (saved > 0) {
-    tokenSavingsText.textContent = `${saved}% saved on average`;
+    tokenSavingsText.textContent = `${saved}% saved`;
     tokenSavingsBadge.style.color = '#34d399';
   } else {
-    tokenSavingsText.textContent = `0% saved on average`;
+    tokenSavingsText.textContent = `0% saved`;
     tokenSavingsBadge.style.color = 'var(--clr-text-dim)';
   }
 }
