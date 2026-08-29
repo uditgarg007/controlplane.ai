@@ -26,6 +26,15 @@ setup_environment()
 import uvicorn
 from controlplane.api.server import app
 
+# Hugging Face ZeroGPU spaces require at least one @spaces.GPU function
+try:
+    import spaces
+    @spaces.GPU
+    def dummy_gpu():
+        pass
+except ImportError:
+    pass
+
 if __name__ == "__main__":
     # Hugging Face Spaces routes internal traffic to port 7860
     uvicorn.run(app, host="0.0.0.0", port=7860)
