@@ -349,7 +349,7 @@ function renderLatencySparkline(data) {
 // Token Bars
 // ──────────────────────────────────────────────────────────
 function renderTokenBars(data) {
-  // Use last non-cache-hit request's token economics if available
+  // Use the most recent request's token economics (including cache hits)
   const recent = data.recent_requests || [];
   const last = recent.slice().reverse().find(r => r.token_economics && r.token_economics.raw_token_count > 0);
   const eco = (last && last.token_economics) || {};
@@ -357,7 +357,7 @@ function renderTokenBars(data) {
   const comp = eco.compressed_token_count || 0;
 
   document.getElementById('valRawTokens').textContent = raw > 0 ? `${raw.toLocaleString()} tokens` : '— tokens';
-  document.getElementById('valCompressedTokens').textContent = comp > 0 ? `${comp.toLocaleString()} tokens` : '— tokens';
+  document.getElementById('valCompressedTokens').textContent = raw > 0 ? `${comp.toLocaleString()} tokens` : '— tokens';
 
   const compPct = raw > 0 ? Math.min(Math.round((comp / raw) * 100), 100) : 0;
   document.getElementById('barCompressed').style.width = `${compPct}%`;
@@ -365,12 +365,19 @@ function renderTokenBars(data) {
   const savedRatio = Math.max(data.token_economics.avg_compression_ratio || 0, 0);
   const saved = Math.round(savedRatio * 100);
   
-  if (saved > 0) {
-    document.getElementById('tokenSavingsText').textContent = `${saved}% saved on average`;
-    document.getElementById('tokenSavingsBadge').style.color = '#34d399';
+  const tokenSavingsText = document.getElementById('tokenSavingsText');
+  const tokenSavingsBadge = document.getElementById('tokenSavingsBadge');
+  
+  if (comp === 0 && raw > 0) {
+    // Current request is a cache hit
+    tokenSavingsText.innerHTML = `<strong>100% saved</strong> (Cache Hit!)`;
+    tokenSavingsBadge.style.color = '#10b981'; // vibrant green
+  } else if (saved > 0) {
+    tokenSavingsText.textContent = `${saved}% saved on average`;
+    tokenSavingsBadge.style.color = '#34d399';
   } else {
-    document.getElementById('tokenSavingsText').textContent = `0% saved on average`;
-    document.getElementById('tokenSavingsBadge').style.color = 'var(--clr-text-dim)';
+    tokenSavingsText.textContent = `0% saved on average`;
+    tokenSavingsBadge.style.color = 'var(--clr-text-dim)';
   }
 }
 

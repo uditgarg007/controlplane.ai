@@ -51,12 +51,23 @@ def run_pipeline(
     if cached_answer:
         total_ms = _elapsed_ms(pipeline_t0)
         logger.info(f"[Pipeline] CACHE HIT — {total_ms:.1f} ms")
+        
+        # When hitting cache, we save 100% of the tokens that would have been used.
+        # Estimate the raw tokens that would have been retrieved (e.g. 5x the answer length).
+        estimated_raw = max(100, int((len(raw_query) + len(cached_answer)) / 0.75) * 5)
+        
         resp = PipelineResponse(
             query_id=query_id,
             final_answer=cached_answer,
             cache_hit=True,
             total_latency_ms=total_ms,
             latency_breakdown={"cache_lookup": total_ms},
+            token_economics={
+                "raw_token_count": estimated_raw,
+                "compressed_token_count": 0,
+                "compression_ratio": 1.0,
+                "source_channel": "cache"
+            }
         )
         _emit_metrics(resp, align_score=1.0)
         return resp
