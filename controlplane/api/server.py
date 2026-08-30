@@ -91,6 +91,10 @@ class QueryRequest(BaseModel):
         default=None,
         description="Optional JSON schema for output format validation",
     )
+    session_id: Optional[str] = Field(
+        default=None,
+        description="Optional session ID for multi-turn conversation memory",
+    )
 
 
 class QueryResponse(BaseModel):
@@ -109,6 +113,15 @@ class QueryResponse(BaseModel):
     total_latency_ms: float
     guard_risk_score: float = 0.0
     guard_verdict: str = "allow"
+
+class ExecutionRequest(BaseModel):
+    tool_name: str
+    args: dict[str, Any]
+
+class ExecutionResponse(BaseModel):
+    allowed: bool
+    reason: str
+    severity: str
 
 
 # ─────────────────────────────────────────────────────────────
@@ -135,6 +148,7 @@ async def query_endpoint(req: QueryRequest) -> QueryResponse:
             raw_query=req.query,
             expected_format=req.expected_format,
             top_k=req.top_k,
+            session_id=req.session_id,
         )
     except Exception as exc:
         logger.exception(f"Pipeline error: {exc}")
@@ -156,6 +170,16 @@ async def query_endpoint(req: QueryRequest) -> QueryResponse:
         total_latency_ms=result.total_latency_ms,
         guard_risk_score=result.guard_risk_score,
         guard_verdict=result.guard_verdict,
+    )
+
+@app.post("/api/execute", response_model=ExecutionResponse, summary="Validate agentic tool execution")
+async def execute_endpoint(req: ExecutionRequest) -> ExecutionResponse:
+    from controlplane.core.execution_guard import ExecutionGuard
+    result = ExecutionGuard.validate_tool_call(req.tool_name, req.args)
+    return ExecutionResponse(
+        allowed=result["allowed"],
+        reason=result["reason"],
+        severity=result["severity"].value if hasattr(result["severity"], "value") else str(result["severity"])
     )
 
 
@@ -229,6 +253,8 @@ class PolicyUpdateRequest(BaseModel):
     guard_block_signal_threshold: float
     pii_masking_enabled: bool
     quarantine_on_warn: bool
+    latency_priority: str
+    assurance_level: str
 
 @app.put("/api/policy/{name}", summary="Update a policy profile")
 async def update_policy(name: str, req: PolicyUpdateRequest):
@@ -239,7 +265,9 @@ async def update_policy(name: str, req: PolicyUpdateRequest):
         guard_block_composite_threshold=req.guard_block_composite_threshold,
         guard_block_signal_threshold=req.guard_block_signal_threshold,
         pii_masking_enabled=req.pii_masking_enabled,
-        quarantine_on_warn=req.quarantine_on_warn
+        quarantine_on_warn=req.quarantine_on_warn,
+        latency_priority=req.latency_priority,
+        assurance_level=req.assurance_level
     )
     from controlplane.core.governance import PolicyEngine
     PolicyEngine.update_policy(profile)

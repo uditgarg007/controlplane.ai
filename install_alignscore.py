@@ -33,7 +33,22 @@ def main():
         print("Error: pyproject.toml not found in the cloned repo!")
         sys.exit(1)
 
-    # 3. Install the modified package using pip
+    # 3. Modify model.py for modern transformers compatibility (AdamW moved to torch.optim)
+    model_py_path = os.path.join(folder_name, "src", "alignscore", "model.py")
+    if os.path.exists(model_py_path):
+        print(f"Modifying {model_py_path} for AdamW compatibility...")
+        with open(model_py_path, "r", encoding="utf-8") as f:
+            model_content = f.read()
+        if "from transformers import AdamW" in model_content:
+            model_content = model_content.replace(
+                "from transformers import AdamW, get_linear_schedule_with_warmup, AutoConfig",
+                "from transformers import get_linear_schedule_with_warmup, AutoConfig\nfrom torch.optim import AdamW"
+            )
+            with open(model_py_path, "w", encoding="utf-8") as f:
+                f.write(model_content)
+            print("Successfully patched model.py!")
+
+    # 4. Install the modified package using pip
     print("Installing modified AlignScore package...")
     # Using sys.executable to ensure we install to the correct virtualenv/python environment
     subprocess.run([sys.executable, "-m", "pip", "install", f"./{folder_name}"], check=True)

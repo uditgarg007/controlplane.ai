@@ -116,11 +116,12 @@ The ingress stage is the safety gatekeeper. It performs four operations:
 | Step | What It Does | How |
 |------|-------------|-----|
 | **Jailbreak Detection** | Blocks adversarial prompts ("Ignore all instructions…", "Act as DAN…") | Keyword matching against known attack patterns |
+| **Harmful Intent Detection** | Blocks requests for weapons, explosives, malware, or dangerous chemistry | Combinatorial regex matching (verb + target) with protective framing exemptions |
 | **PII Masking** | Strips personally identifiable information before it reaches the LLM | Presidio NER (emails, phones, SSNs, credit cards, person names) + regex fallback |
 | **Intent Classification** | Determines query type: `SEMANTIC`, `MULTI_HOP`, `CONVERSATIONAL`, or `MALICIOUS` | Heuristic rules first (fast, deterministic), then BART zero-shot classification as fallback |
 | **Constraint Decomposition** | Splits complex queries into positive search vectors and negative exclusion constraints | Regex splitting on conjunctions, negation markers ("but not", "exclude") |
 
-If a query is classified as `MALICIOUS`, the pipeline stops immediately and returns a blocked response.
+If a query is classified as `MALICIOUS` or triggered by the harmful intent detection, the pipeline stops immediately and returns a blocked response.
 
 ---
 
@@ -148,7 +149,7 @@ This is the core LLM interaction stage. It performs:
 
 1. **Pre-generation Grounding (AlignScore)** — Compares the *user's query* against the retrieved context *before* generation. If the query cannot be grounded in the context (and isn't conversational), the pipeline short-circuits with a `FAIL` severity, saving LLM tokens and time. It runs locally using `AlignScore-base.ckpt` with a batch size of 16.
 
-2. **Prompt Construction** — For grounded queries, the LLM receives a strict system prompt ("Answer ONLY using the provided context"). For conversational queries (greetings, general knowledge, mock context), a relaxed prompt is used instead.
+2. **Prompt Construction** — For grounded queries, the LLM receives a strict system prompt enforcing standardized refusal responses ("I'm sorry, I don't have enough information in my knowledge base..."). It also explicitly handles PII redaction refusals. For conversational queries (greetings, general knowledge, mock context), a relaxed prompt is used instead.
 
 3. **LLM Call** — Calls the Gemini API via the OpenAI-compatible endpoint. Powered by **Tenacity for exponential backoff** to automatically retry transient quota issues, and a **multi-model fallback** mechanism: if a model exhausts its retries due to a hard rate limit (429), the system seamlessly fails over to alternative models (`gemini-3.5-flash-lite` → `gemini-3.5-flash` → `gemini-flash-latest`).
 
@@ -343,6 +344,16 @@ This Edge Case highlights our safety layer's precision and demonstrates a robust
 **Root Cause:** AlignScore was originally designed as a post-generation checker (LLM Output vs Context) rather than a pre-generation gate (Query vs Context).
 
 **Fix:** Restructured the generation pipeline in `generation.py`. AlignScore now evaluates the user's query against the retrieved context *before* the LLM call. If there's no alignment, the pipeline short-circuits immediately with a `FAIL` severity. We also updated the refusal detection markers to catch all Gemini refusal phrases, and explicitly set up AlignScore to use a local `AlignScore-base.ckpt` file with batch size 16.
+
+---
+
+### Issue 12: Generic Refusals and Harmful Intent Leaks
+
+**Symptom:** Generic "Insufficient context" responses were unhelpful to users when their queries were ungrounded, and the system needed stronger guardrails against complex harmful intent queries (e.g., chemical synthesis for explosives).
+
+**Root Cause:** The system lacked a combinatorial approach to detect harmful intent (verb + target) while respecting protective framing, and the LLM's system prompt resulted in opaque rejection messages.
+
+**Fix:** Implemented a robust harmful intent detection system in `ingress.py` that identifies combinations of action verbs and dangerous targets, while exempting queries with protective framing ("how to avoid"). Standardized the LLM refusal responses in `generation.py` to provide clear, transparent feedback ("I'm sorry, I don't have enough information in my knowledge base to answer this question.") instead of generic "Insufficient context" messages.
 
 ---
 

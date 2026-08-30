@@ -17,8 +17,8 @@ User Query
 ┌──────────────────────────────────────────┐
 │  Stage 1: Ingress & Decomposer          │
 │  • Multi-turn Session Risk Compounder   │
-│  • Intent Classification (BERT)         │
-│  • PII Masking & Malicious Content Check│
+│  • Intent Classification (BART)         │
+│  • PII & Harmful/Malicious Content Check│
 └────────────────┬─────────────────────────┘
                  │ clean_query + constraints
                  ▼

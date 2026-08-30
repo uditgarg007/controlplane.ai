@@ -112,7 +112,9 @@ def record_request(
         raw = token_economics.get("raw_token_count", 0)
         compressed = token_economics.get("compressed_token_count", 0)
         if raw > 0:
-            _cumulative["token_savings"] += 1 - compressed / raw
+            _cumulative["token_savings"] += 1 - (compressed / raw)
+            _cumulative["raw_tokens"] += raw
+            _cumulative["compressed_tokens"] += compressed
 
     if _prometheus_available:
         _request_count.labels(severity=severity).inc()
@@ -162,6 +164,10 @@ def get_dashboard_snapshot() -> dict[str, Any]:
             },
             "token_economics": {
                 "avg_compression_ratio": max(round(_cumulative["token_savings"] / n, 4), 0.0),
+                "avg_cost_per_request": round((_cumulative["compressed_tokens"] / n) * 0.00000015, 6) if n > 0 else 0.0,
+            },
+            "governance": {
+                "human_review_rate": round(_counters["severity_quarantine"] / n, 4) if n > 0 else 0.0,
             },
             "grounding": {
                 "avg_align_score": round(_cumulative["align_score"] / n, 4),

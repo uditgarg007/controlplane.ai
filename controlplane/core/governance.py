@@ -10,21 +10,35 @@ from controlplane.config import UserContext, PolicyProfile, UserRole
 DB_PATH = os.path.join("data", "governance.db")
 
 _DEFAULT_POLICIES = {
-    "strict_external": PolicyProfile(
-        name="strict_external",
-        align_score_threshold=0.75,
-        guard_block_composite_threshold=0.40,
-        guard_block_signal_threshold=0.70,
-        pii_masking_enabled=True,
-        quarantine_on_warn=True,
-    ),
-    "relaxed_internal": PolicyProfile(
-        name="relaxed_internal",
-        align_score_threshold=0.50,
+    "customer_support": PolicyProfile(
+        name="customer_support",
+        align_score_threshold=0.60,
         guard_block_composite_threshold=0.60,
         guard_block_signal_threshold=0.85,
+        pii_masking_enabled=True,
+        quarantine_on_warn=True,
+        latency_priority="low",
+        assurance_level="medium"
+    ),
+    "internal_copilot": PolicyProfile(
+        name="internal_copilot",
+        align_score_threshold=0.70,
+        guard_block_composite_threshold=0.50,
+        guard_block_signal_threshold=0.80,
         pii_masking_enabled=False,
-        quarantine_on_warn=False,
+        quarantine_on_warn=True,
+        latency_priority="medium",
+        assurance_level="medium"
+    ),
+    "regulated_decision": PolicyProfile(
+        name="regulated_decision",
+        align_score_threshold=0.85,
+        guard_block_composite_threshold=0.30,
+        guard_block_signal_threshold=0.60,
+        pii_masking_enabled=True,
+        quarantine_on_warn=True,
+        latency_priority="flexible",
+        assurance_level="high"
     ),
 }
 
@@ -63,7 +77,9 @@ def init_db():
                 guard_block_composite_threshold REAL,
                 guard_block_signal_threshold REAL,
                 pii_masking_enabled INTEGER,
-                quarantine_on_warn INTEGER
+                quarantine_on_warn INTEGER,
+                latency_priority TEXT DEFAULT 'medium',
+                assurance_level TEXT DEFAULT 'medium'
             )
         ''')
         cursor.execute('''
@@ -74,19 +90,31 @@ def init_db():
                 last_updated REAL
             )
         ''')
+
+        # Run schema migrations first for existing databases
+        try:
+            cursor.execute("ALTER TABLE hitl_queue ADD COLUMN policy_used TEXT")
+        except sqlite3.OperationalError:
+            pass
+
+        try:
+            cursor.execute("ALTER TABLE policies ADD COLUMN latency_priority TEXT DEFAULT 'medium'")
+        except sqlite3.OperationalError:
+            pass
+
+        try:
+            cursor.execute("ALTER TABLE policies ADD COLUMN assurance_level TEXT DEFAULT 'medium'")
+        except sqlite3.OperationalError:
+            pass
+
         # Insert defaults if empty
         cursor.execute("SELECT count(*) FROM policies")
         if cursor.fetchone()[0] == 0:
             for p in _DEFAULT_POLICIES.values():
                 cursor.execute(
-                    "INSERT INTO policies (name, align_score_threshold, guard_block_composite_threshold, guard_block_signal_threshold, pii_masking_enabled, quarantine_on_warn) VALUES (?, ?, ?, ?, ?, ?)",
-                    (p.name, p.align_score_threshold, p.guard_block_composite_threshold, p.guard_block_signal_threshold, int(p.pii_masking_enabled), int(p.quarantine_on_warn))
+                    "INSERT INTO policies (name, align_score_threshold, guard_block_composite_threshold, guard_block_signal_threshold, pii_masking_enabled, quarantine_on_warn, latency_priority, assurance_level) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    (p.name, p.align_score_threshold, p.guard_block_composite_threshold, p.guard_block_signal_threshold, int(p.pii_masking_enabled), int(p.quarantine_on_warn), p.latency_priority, p.assurance_level)
                 )
-        
-        try:
-            cursor.execute("ALTER TABLE hitl_queue ADD COLUMN policy_used TEXT")
-        except sqlite3.OperationalError:
-            pass
 
         conn.commit()
 
@@ -95,7 +123,13 @@ init_db()
 class PolicyEngine:
     @staticmethod
     def get_policy(context: UserContext) -> PolicyProfile:
-        policy_name = "relaxed_internal" if context.role in [UserRole.INTERNAL, UserRole.ADMIN] else "strict_external"
+        if context.role == UserRole.ADMIN:
+            policy_name = "regulated_decision"
+        elif context.role == UserRole.INTERNAL:
+            policy_name = "internal_copilot"
+        else:
+            policy_name = "customer_support"
+
         try:
             with sqlite3.connect(DB_PATH, timeout=5.0) as conn:
                 conn.row_factory = sqlite3.Row
@@ -107,7 +141,9 @@ class PolicyEngine:
                         guard_block_composite_threshold=row["guard_block_composite_threshold"],
                         guard_block_signal_threshold=row["guard_block_signal_threshold"],
                         pii_masking_enabled=bool(row["pii_masking_enabled"]),
-                        quarantine_on_warn=bool(row["quarantine_on_warn"])
+                        quarantine_on_warn=bool(row["quarantine_on_warn"]),
+                        latency_priority=row["latency_priority"] if "latency_priority" in row.keys() else "balanced",
+                        assurance_level=row["assurance_level"] if "assurance_level" in row.keys() else "medium"
                     )
         except Exception as e:
             logger.error(f"Failed to fetch policy from DB: {e}")
@@ -118,8 +154,8 @@ class PolicyEngine:
         try:
             with sqlite3.connect(DB_PATH, timeout=5.0) as conn:
                 conn.execute(
-                    "UPDATE policies SET align_score_threshold=?, guard_block_composite_threshold=?, guard_block_signal_threshold=?, pii_masking_enabled=?, quarantine_on_warn=? WHERE name=?",
-                    (profile.align_score_threshold, profile.guard_block_composite_threshold, profile.guard_block_signal_threshold, int(profile.pii_masking_enabled), int(profile.quarantine_on_warn), profile.name)
+                    "UPDATE policies SET align_score_threshold=?, guard_block_composite_threshold=?, guard_block_signal_threshold=?, pii_masking_enabled=?, quarantine_on_warn=?, latency_priority=?, assurance_level=? WHERE name=?",
+                    (profile.align_score_threshold, profile.guard_block_composite_threshold, profile.guard_block_signal_threshold, int(profile.pii_masking_enabled), int(profile.quarantine_on_warn), profile.latency_priority, profile.assurance_level, profile.name)
                 )
         except Exception as e:
             logger.error(f"Failed to update policy: {e}")

@@ -32,6 +32,7 @@ def run_pipeline(
     expected_format: dict[str, Any] | None = None,
     top_k: int = 8,
     user_context: Optional[UserContext] = None,
+    session_id: Optional[str] = None,
 ) -> PipelineResponse:
     """
     Full ControlPlane.ai pipeline for a single query.
@@ -76,6 +77,17 @@ def run_pipeline(
     ingress = run_ingress(raw_query, policy=policy, user_context=user_context)
     latency["ingress"] = ingress.latency_ms
 
+    if session_id:
+        from controlplane.session import SessionManager
+        session_mgr = SessionManager()
+        cum_risk = session_mgr.accumulate_risk(session_id, ingress.guard_risk_score)
+        logger.info(f"[Pipeline] Session {session_id} cumulative risk: {cum_risk:.2f}")
+        # Block if compounding risk gets too high across the session
+        if cum_risk > 2.0:
+            ingress.blocked = True
+            ingress.block_reason = "Compounding session risk exceeded maximum threshold (2.0)."
+            ingress.guard_risk_score = cum_risk
+            
     if ingress.blocked:
         total_ms = _elapsed_ms(pipeline_t0)
         logger.warning(f"[Pipeline] BLOCKED — {ingress.block_reason}")
@@ -90,6 +102,7 @@ def run_pipeline(
             f"Risk score: {ingress.guard_risk_score:.2f} / 1.00"
         )
         Governance.log_audit(query_id, user_context.user_id, "BLOCKED", ingress.block_reason or "")
+        estimated_raw_tokens = max(300, len(raw_query) * 5)
         resp = PipelineResponse(
             query_id=query_id,
             final_answer=flagged_answer,
@@ -101,6 +114,12 @@ def run_pipeline(
             guard_verdict=ingress.guard_verdict,
             total_latency_ms=total_ms,
             latency_breakdown=latency,
+            token_economics={
+                "raw_token_count": estimated_raw_tokens,
+                "compressed_token_count": 0,
+                "compression_ratio": 1.0,
+                "source_channel": "guard_blocked"
+            }
         )
         _emit_metrics(resp, align_score=0.0)
         return resp
@@ -110,7 +129,11 @@ def run_pipeline(
     latency["retrieval"] = retrieval.latency_ms
 
     # Stage 3: Generation
-    generation = run_generation(ingress, retrieval, expected_format=expected_format, policy=policy)
+    generation_kwargs = {"expected_format": expected_format, "policy": policy}
+    if session_id:
+        generation_kwargs["session_messages"] = session_mgr.get_messages(session_id)
+        
+    generation = run_generation(ingress, retrieval, **generation_kwargs)
     latency["generation"] = generation.latency_ms
 
     repair_triggered = False
@@ -119,7 +142,6 @@ def run_pipeline(
     output_lower = generation.raw_output.lower() if generation.raw_output else ""
     is_privacy_or_error = (
         "redacted for privacy" in output_lower
-        or "personally identifiable information" in output_lower
         or "cannot proceed" in output_lower
         or "[llm error]" in output_lower
         or "[llm unavailable]" in output_lower
@@ -133,13 +155,23 @@ def run_pipeline(
         and is_privacy_or_error
     )
 
-    if generation.severity == SeverityLevel.FAIL and not is_intentional_fail:
+    if (generation.severity in [SeverityLevel.FAIL, SeverityLevel.WARN]) and not is_intentional_fail:
         repair_triggered = True
-        repair = run_repair_loop(ingress, generation, retrieval)
+        repair = run_repair_loop(ingress, generation, retrieval, policy=policy)
         latency["repair"] = repair.latency_ms
         repair_iterations = repair.iterations_used
         final_answer = repair.final_output
-        final_severity = SeverityLevel.WARN if repair.terminated_by_limit else SeverityLevel.PASS
+        
+        # 3 explicit repair loop outcomes:
+        # 1. Repaired successfully -> mark as PASS
+        # 2. Blocked / Unsafe -> mark as FAIL
+        # 3. Further human review needed -> mark as QUARANTINE
+        if repair.status == "blocked" or repair.final_severity == SeverityLevel.FAIL:
+            final_severity = SeverityLevel.FAIL
+        elif repair.status == "human_needed" or repair.final_severity == SeverityLevel.QUARANTINE or repair.terminated_by_limit:
+            final_severity = SeverityLevel.QUARANTINE
+        else:
+            final_severity = SeverityLevel.PASS
     else:
         final_answer = generation.raw_output
         final_severity = generation.severity
@@ -163,6 +195,9 @@ def run_pipeline(
         and not final_answer.startswith(_error_prefixes)
     ):
         cache_store(raw_query, final_answer)
+        if session_id:
+            session_mgr.add_message(session_id, "user", raw_query)
+            session_mgr.add_message(session_id, "assistant", final_answer)
 
     submit_for_audit(query_id, final_answer, metadata={"raw_query": raw_query})
 

@@ -40,7 +40,12 @@
           <span class="live-dot"></span>
           <span>LIVE</span>
         </div>
-        <a href="/dashboard/policy.html" style="color: var(--clr-text-sub); font-size: 0.8rem; text-decoration: none; margin-right: 12px; font-weight: 500;">⚙️ Policy Engine</a>
+        <select id="appSelector" style="background: var(--bg-surface); color: var(--clr-text); border: 1px solid var(--border-subtle); border-radius: 4px; padding: 4px 8px; margin-right: 12px; font-size: 0.8rem;">
+            <option value="all" style="background: #1e1e2e; color: #fff;">All Apps</option>
+            <option value="customer_support" style="background: #1e1e2e; color: #fff;" selected>Customer Support</option>
+            <option value="internal_copilot" style="background: #1e1e2e; color: #fff;">Internal Copilot</option>
+            <option value="regulated_decision" style="background: #1e1e2e; color: #fff;">Regulated Decision</option>
+        </select>
         <a href="/dashboard/hitl.html" style="color: var(--clr-text-sub); font-size: 0.8rem; text-decoration: none; margin-right: 12px; font-weight: 500;">📋 Review Queue</a>
         <span class="update-label">Auto-refresh: <strong id="refreshCountdown">5s</strong></span>
         <button class="btn-icon" id="pauseBtn" title="Pause refresh" aria-label="Pause auto-refresh">
@@ -84,6 +89,11 @@
         <div class="kpi-label">Token Savings</div>
         <div class="kpi-value" id="valSavings">—</div>
         <div class="kpi-sub">avg compression</div>
+      </div>
+      <div class="kpi-card" id="kpiHumanReview">
+        <div class="kpi-label">Human Review Rate</div>
+        <div class="kpi-value" id="valHumanReview">—</div>
+        <div class="kpi-sub">quarantined reqs</div>
       </div>
     </section>
 

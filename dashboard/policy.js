@@ -38,6 +38,14 @@ function renderPolicies(policies) {
                     Quarantine on WARN
                 </label>
             </div>
+            <div class="form-group">
+                <label>Latency Priority</label>
+                <input type="text" id="${p.name}_latency" value="${p.latency_priority || 'balanced'}">
+            </div>
+            <div class="form-group">
+                <label>Assurance Level</label>
+                <input type="text" id="${p.name}_assurance" value="${p.assurance_level || 'medium'}">
+            </div>
             <button class="btn-save" onclick="savePolicy('${p.name}')">Save Changes</button>
         `;
         container.appendChild(card);
@@ -50,7 +58,9 @@ async function savePolicy(name) {
         guard_block_composite_threshold: parseFloat(document.getElementById(`${name}_comp`).value),
         guard_block_signal_threshold: parseFloat(document.getElementById(`${name}_sig`).value),
         pii_masking_enabled: document.getElementById(`${name}_pii`).checked,
-        quarantine_on_warn: document.getElementById(`${name}_quarantine`).checked
+        quarantine_on_warn: document.getElementById(`${name}_quarantine`).checked,
+        latency_priority: document.getElementById(`${name}_latency`).value,
+        assurance_level: document.getElementById(`${name}_assurance`).value
     };
     
     const res = await fetch(`/api/policy/${name}`, {

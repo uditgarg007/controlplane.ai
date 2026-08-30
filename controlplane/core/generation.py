@@ -99,6 +99,7 @@ def run_generation(
     retrieval: RetrievalResult,
     expected_format: dict[str, Any] | None = None,
     policy: PolicyProfile | None = None,
+    session_messages: list[dict] | None = None,
 ) -> GenerationResult:
     """
     Generate a response with pre-generation grounding validation.
@@ -189,7 +190,7 @@ def run_generation(
     else:
         system_prompt = _SYSTEM_PROMPT + f"\nThe current date and time is {current_date}.\n"
 
-    raw_output = _call_llm(user_message, system_prompt=system_prompt)
+    raw_output = _call_llm(user_message, system_prompt=system_prompt, session_messages=session_messages)
 
     # ── 4. Format validation (LettuceDetect-style) ────────────
     format_valid, format_errors = _validate_format(raw_output, expected_format)
@@ -224,7 +225,7 @@ def run_generation(
 # LLM call
 # ─────────────────────────────────────────────────────────────
 
-def _call_llm(user_message: str, system_prompt: str = _SYSTEM_PROMPT) -> str:
+def _call_llm(user_message: str, system_prompt: str = _SYSTEM_PROMPT, session_messages: list[dict] | None = None) -> str:
     """Call the configured LLM and return the raw text response with retry + fallback on rate limits."""
     if not _openai_available:
         return "[MOCK GENERATION] The answer based on retrieved context is: 42."
@@ -241,10 +242,10 @@ def _call_llm(user_message: str, system_prompt: str = _SYSTEM_PROMPT) -> str:
     # Deduplicate while preserving sequence order
     candidate_models = list(dict.fromkeys(candidate_models))
 
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": user_message},
-    ]
+    messages = [{"role": "system", "content": system_prompt}]
+    if session_messages:
+        messages.extend(session_messages)
+    messages.append({"role": "user", "content": user_message})
 
     last_error = None
     for model_name in candidate_models:
@@ -418,17 +419,17 @@ def _check_grounding(hypothesis: str, context: str, policy: PolicyProfile | None
 
 
 def _jaccard_trigram_score(text_a: str, text_b: str) -> float:
-    """Simple Jaccard similarity on word trigrams as a lightweight grounding proxy."""
+    """Simple inclusion similarity on word trigrams as a lightweight grounding proxy."""
     def trigrams(text: str) -> set[tuple]:
         words = re.findall(r"\w+", text.lower())
         return set(zip(words, words[1:], words[2:]))
 
     a, b = trigrams(text_a), trigrams(text_b)
-    if not a and not b:
+    if not a:
         return 1.0
     intersection = len(a & b)
-    union = len(a | b)
-    return intersection / union if union else 0.0
+    # Use overlap coefficient instead of Jaccard to avoid penalizing large contexts
+    return intersection / len(a)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -464,7 +465,6 @@ def _route_severity(
         "insufficient context",
         # PII / privacy refusals
         "redacted for privacy",
-        "personally identifiable information",
         # Capability refusals
         "cannot proceed",
         "cannot access",

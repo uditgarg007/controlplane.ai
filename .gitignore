@@ -6,8 +6,14 @@ venv/
 env/
 .env
 data/*.db
+data/*.db-journal
+data/*.db-wal
+data/*.db-shm
 data/*.sqlite3
 .DS_Store
 *.log
 .gemini/
 checkpoints/
+.pytest_cache/
+*.pdf
+.vscode/

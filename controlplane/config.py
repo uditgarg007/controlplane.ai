@@ -53,6 +53,8 @@ class PolicyProfile(BaseModel):
     guard_block_signal_threshold: float
     pii_masking_enabled: bool = True
     quarantine_on_warn: bool = False
+    latency_priority: str = "balanced"
+    assurance_level: str = "medium"
 
 
 
@@ -114,6 +116,8 @@ class RepairResult(BaseModel):
     max_iterations: int = 3
     repair_channel: RepairChannel = RepairChannel.VECTOR
     terminated_by_limit: bool = False
+    final_severity: SeverityLevel = SeverityLevel.PASS
+    status: str = "pass"  # "pass", "blocked", or "human_needed"
     latency_ms: float = 0.0
 
 

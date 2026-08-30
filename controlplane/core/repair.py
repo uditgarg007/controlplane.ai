@@ -24,6 +24,7 @@ from controlplane.config import (
     Config,
     GenerationResult,
     IngressResult,
+    PolicyProfile,
     RepairChannel,
     RepairResult,
     RetrievalResult,
@@ -39,6 +40,7 @@ def run_repair_loop(
     ingress: IngressResult,
     failed_generation: GenerationResult,
     retrieval: RetrievalResult,
+    policy: PolicyProfile | None = None,
 ) -> RepairResult:
     """
     Entry point for Stage 4.
@@ -47,9 +49,11 @@ def run_repair_loop(
       1. Judge analyses the failure.
       2. Query is rewritten.
       3. Re-retrieval + re-generation happen.
-      4. If severity == PASS → exit loop early.
+      4. If severity == PASS → exit loop early (repaired -> PASS).
+      5. If severity == FAIL with explicit refusal/block → exit (blocked -> FAIL).
+      6. If loop exhausted → exit with QUARANTINE (human needed -> QUARANTINE).
 
-    Returns RepairResult with the best output found.
+    Returns RepairResult with final severity and status.
     """
     # Inline imports to avoid circular dependency
     from controlplane.core.generation import run_generation
@@ -63,6 +67,9 @@ def run_repair_loop(
     current_retrieval = retrieval
     current_generation = failed_generation
     channel = RepairChannel.VECTOR
+
+    final_severity = SeverityLevel.PASS
+    status = "pass"
 
     for iteration in range(1, max_iter + 1):
         logger.info(f"[Repair Loop] Iteration {iteration}/{max_iter}")
@@ -95,19 +102,37 @@ def run_repair_loop(
             current_retrieval = run_retrieval(current_ingress)
 
         # ── 6. Re-generate & validate ────────────────────────────
-        current_generation = run_generation(current_ingress, current_retrieval)
+        current_generation = run_generation(current_ingress, current_retrieval, policy=policy)
 
-        # ── 7. Exit early on pass ────────────────────────────────
+        # ── 7. Evaluate iteration outcome ────────────────────────
         if current_generation.severity == SeverityLevel.PASS:
-            logger.info(f"[Repair Loop] Resolved in {iteration} iteration(s).")
+            logger.info(f"[Repair Loop] Successfully repaired in iteration {iteration}.")
+            final_severity = SeverityLevel.PASS
+            status = "pass"
+            break
+
+        out_lower = (current_generation.raw_output or "").lower()
+        if (
+            current_generation.severity == SeverityLevel.FAIL
+            and any(marker in out_lower for marker in ["redacted for privacy", "cannot proceed", "[llm error]", "harmful", "blocked"])
+        ):
+            logger.warning(f"[Repair Loop] Generation blocked / refused during repair iteration {iteration}.")
+            final_severity = SeverityLevel.FAIL
+            status = "blocked"
             break
     else:
         # Loop exhausted without PASS
         terminated_by_limit = True
         logger.warning(
             f"[Repair Loop] Bounded iteration limit ({max_iter}) reached. "
-            "Serving best available output."
+            "Flagging for Human-in-the-Loop review."
         )
+        if current_generation.severity == SeverityLevel.FAIL:
+            final_severity = SeverityLevel.FAIL
+            status = "blocked"
+        else:
+            final_severity = SeverityLevel.QUARANTINE
+            status = "human_needed"
 
     return RepairResult(
         final_output=current_generation.raw_output,
@@ -115,6 +140,8 @@ def run_repair_loop(
         max_iterations=max_iter,
         repair_channel=channel,
         terminated_by_limit=terminated_by_limit,
+        final_severity=final_severity,
+        status=status,
         latency_ms=_elapsed_ms(t0),
     )
 

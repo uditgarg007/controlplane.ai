@@ -58,7 +58,8 @@ function updateCountdown() {
 // ──────────────────────────────────────────────────────────
 async function fetchAndRender() {
   try {
-    const res = await fetch(`${API_BASE}/metrics/dashboard`);
+    const appFilter = document.getElementById('appSelector')?.value || 'all';
+    const res = await fetch(`${API_BASE}/metrics/dashboard?app=${appFilter}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     state.snapshot = data;
@@ -105,6 +106,10 @@ function generateDemoData() {
     latency: { avg_ms: 185 + Math.random() * 60 },
     token_economics: {
       avg_compression_ratio: 0.48 + Math.random() * 0.1,
+      avg_cost_per_request: 0.0003 + Math.random() * 0.0002,
+    },
+    governance: {
+      human_review_rate: (quarantine / total) || 0.0,
     },
     grounding: { avg_align_score: 0.82 + Math.random() * 0.08 },
     repair_loop: { requests_repaired: repairs },
@@ -163,6 +168,7 @@ function renderKPIs(data) {
   animateNumber('valAlign', data.grounding.avg_align_score, v => v.toFixed(3));
   const savingsVal = Math.max(data.token_economics.avg_compression_ratio * 100, 0);
   animateNumber('valSavings', savingsVal, v => `${v.toFixed(1)}<small>%</small>`);
+  animateNumber('valHumanReview', (data.governance?.human_review_rate || 0.0) * 100, v => `${v.toFixed(1)}<small>%</small>`);
 }
 
 function animateNumber(id, target, fmt) {
@@ -567,6 +573,13 @@ function bindControls() {
       countdown = REFRESH_MS / 1000;
     }
   });
+
+  const appSelector = document.getElementById('appSelector');
+  if (appSelector) {
+    appSelector.addEventListener('change', () => {
+      fetchAndRender();
+    });
+  }
 }
 
 function flashLiveBadge() {
